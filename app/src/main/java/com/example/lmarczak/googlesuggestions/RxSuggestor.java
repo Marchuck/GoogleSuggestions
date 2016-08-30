@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import rx.AsyncEmitter;
 import rx.Observable;
@@ -26,6 +27,7 @@ import rx.Subscriber;
 import rx.android.schedulers.AndroidSchedulers;
 import rx.functions.Action0;
 import rx.functions.Action1;
+import rx.functions.Func0;
 import rx.functions.Func1;
 import rx.functions.Func2;
 import rx.functions.Func9;
@@ -83,38 +85,81 @@ public class RxSuggestor {
 
     public static Observable<Integer> test() {
         Log.d(TAG, "test: ");
-        int threadCt = Runtime.getRuntime().availableProcessors() + 1;
+        final int threadCt = Runtime.getRuntime().availableProcessors() + 1;
 
-        final ExecutorService executor = Executors.newFixedThreadPool(threadCt);
-        final Scheduler scheduler = Schedulers.from(executor);
-        return Observable.just(true).flatMap(new Func1<Boolean, Observable<Integer>>() {
+        //  final ExecutorService executor = Executors.newFixedThreadPool(threadCt);
+        //final Scheduler scheduler = Schedulers.from(executor);
+
+        final AtomicInteger batch = new AtomicInteger(0);
+        return Observable.range(1, 1000).groupBy(new Func1<Integer, Integer>() {
+            @Override
+            public Integer call(Integer integer) {
+                return batch.getAndIncrement() % threadCt;
+            }
+        }).flatMap(new Func1<GroupedObservable<Integer, Integer>, Observable<Integer>>() {
+            @Override
+            public Observable<Integer> call(GroupedObservable<Integer, Integer> integerIntegerGroupedObservable) {
+                //Log.d(TAG, "current thread:  " + Thread.currentThread().getName());
+                return integerIntegerGroupedObservable.observeOn(Schedulers.io()).flatMap(new Func1<Integer, Observable<Integer>>() {
                     @Override
-                    public Observable<Integer> call(Boolean aBoolean) {
-                        return Observable.zip(getIntWithDelay(1, 100),
-                                getIntWithDelay(2, 200),
-                                getIntWithDelay(3, 300),
-                                getIntWithDelay(4, 400),
-                                getIntWithDelay(5, 500),
-                                getIntWithDelay(6, 600),
-                                getIntWithDelay(7, 700),
-                                getIntWithDelay(8, 800),
-                                getIntWithDelay(9, 900), new Func9<Integer, Integer, Integer, Integer, Integer, Integer,
-                                        Integer, Integer, Integer, Integer>() {
-                                    @Override
-                                    public Integer call(Integer integer1, Integer integer2, Integer integer3, Integer integer4,
-                                                        Integer integer5, Integer integer6, Integer integer7, Integer integer8, Integer integer9) {
-                                        return integer1 + integer2 + integer3 + integer4 +
-                                                integer5 + integer6 + integer7 + integer8 + integer9;
-                                    }
-                                });
+                    public Observable<Integer> call(Integer i) {
+                        return getIntWithDelay(i, 100 * i);
                     }
-                }).subscribeOn(scheduler).doAfterTerminate(new Action0() {
+                }).map(new Func1<Integer, Integer>() {
                     @Override
-                    public void call() {
-                        Log.d(TAG, "doAfterTerminate");
-                        executor.shutdown();
+                    public Integer call(Integer integer) {
+                        Log.d(TAG, "__next(" + integer + ")__");
+                        return integer;
                     }
                 });
+            }
+        });
+
+//            return Observable.range(1, 10).flatMap(new Func1<Integer, Observable<Integer>>() {
+//                @Override
+//                public Observable<Integer> call(Integer integer) {
+//                    return getIntWithDelay(integer, 100 * integer);
+//                }
+//            }).toList().map(new Func1<List<Integer>, Integer>() {
+//                @Override
+//                public Integer call(List<Integer> integers) {
+//                    int sum = 0;
+//                    for (Integer s : integers) {
+//                        sum += s;
+//                    }
+//                    return sum;
+//                }
+//            })
+
+//        return Observable.just(true).flatMap(new Func1<Boolean, Observable<Integer>>() {
+//            @Override
+//            public Observable<Integer> call(Boolean aBoolean) {
+//                return Observable.zip(getIntWithDelay(1, 100),
+//                        getIntWithDelay(2, 200),
+//                        getIntWithDelay(3, 300),
+//                        getIntWithDelay(4, 400),
+//                        getIntWithDelay(5, 500),
+//                        getIntWithDelay(6, 600),
+//                        getIntWithDelay(7, 700),
+//                        getIntWithDelay(8, 800),
+//                        getIntWithDelay(9, 900), new Func9<Integer, Integer, Integer, Integer, Integer, Integer,
+//                                Integer, Integer, Integer, Integer>() {
+//                            @Override
+//                            public Integer call(Integer integer1, Integer integer2, Integer integer3, Integer integer4,
+//                                                Integer integer5, Integer integer6, Integer integer7, Integer integer8, Integer integer9) {
+//                                return integer1 + integer2 + integer3 + integer4 +
+//                                        integer5 + integer6 + integer7 + integer8 + integer9;
+//                            }
+//                        });
+//            }
+//        })
+//                    .subscribeOn(scheduler).doAfterTerminate(new Action0() {
+//                        @Override
+//                        public void call() {
+//                            Log.d(TAG, "doAfterTerminate");
+//                            executor.shutdown();
+//                        }
+//                    });
     }
 
     private static Observable<Integer> getIntWithDelay(final int intie, final long delay) {
